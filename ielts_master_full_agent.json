@@ -1,0 +1,343 @@
+{
+  "name": "IELTS Master — Full Platform Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 9 * * *" }]
+        }
+      },
+      "name": "Daily 9am trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [240, 160]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 10 * * 1" }]
+        }
+      },
+      "name": "Weekly Monday trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [240, 280]
+    },
+    {
+      "parameters": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "max_tokens": 400,
+          "system": "You are the social media agent for IELTS Master (ieltsmaster.org). Write a daily IELTS Writing Task 2 tip in Mongolian (Cyrillic script). Warm, casual tone. No hashtags. Under 200 words. Pure value — no product pitch. Output ONLY the post text.",
+          "messages": [{ "role": "user", "content": "Write today's IELTS writing tip for our Mongolian Telegram group." }]
+        }
+      },
+      "name": "Generate MN Telegram post",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [480, 160]
+    },
+    {
+      "parameters": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "max_tokens": 400,
+          "system": "You are the social media agent for IELTS Master (ieltsmaster.org). Write a daily IELTS Writing tip in Russian for Kazakh students. Friendly tone. No hashtags. Under 200 words. Output ONLY the post text.",
+          "messages": [{ "role": "user", "content": "Write today's IELTS tip for our Kazakh Telegram group (in Russian)." }]
+        }
+      },
+      "name": "Generate KZ Telegram post",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [480, 240]
+    },
+    {
+      "parameters": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "max_tokens": 400,
+          "system": "You are the social media agent for IELTS Master (ieltsmaster.org). Write an English Instagram caption for an IELTS writing tip. Hook first line. 150-200 words. 6 hashtags: #IELTS #IELTSprep #IELTSwriting #bandscore #studyabroad #englishlearning. CTA: link in bio. Output ONLY the caption text.",
+          "messages": [{ "role": "user", "content": "Write today's Instagram caption for an IELTS writing tip post." }]
+        }
+      },
+      "name": "Generate Instagram caption",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [480, 320]
+    },
+    {
+      "parameters": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "max_tokens": 300,
+          "system": "You are the social media agent for IELTS Master. Write a Facebook Page post about an IELTS writing tip. Warm community tone. 100-150 words. No hashtags. CTA at end. Output ONLY the post text.",
+          "messages": [{ "role": "user", "content": "Write today's Facebook Page post." }]
+        }
+      },
+      "name": "Generate Facebook post",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [480, 400]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/bot{{$env.TELEGRAM_BOT_TOKEN}}/sendMessage",
+        "method": "POST",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "chat_id": "={{$env.TELEGRAM_CHANNEL_MN}}",
+          "text": "={{$node['Generate MN Telegram post'].json.content[0].text}}",
+          "parse_mode": "HTML"
+        }
+      },
+      "name": "Send to Telegram MN",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [720, 160]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/bot{{$env.TELEGRAM_BOT_TOKEN}}/sendMessage",
+        "method": "POST",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "chat_id": "={{$env.TELEGRAM_CHANNEL_KZ}}",
+          "text": "={{$node['Generate KZ Telegram post'].json.content[0].text}}",
+          "parse_mode": "HTML"
+        }
+      },
+      "name": "Send to Telegram KZ",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [720, 240]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v19.0/{{$env.META_PAGE_ID}}/feed",
+        "method": "POST",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "body": {
+          "message": "={{$node['Generate Facebook post'].json.content[0].text}}",
+          "access_token": "={{$env.META_PAGE_ACCESS_TOKEN}}"
+        }
+      },
+      "name": "Post to Facebook Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [720, 400]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "telegram-webhook",
+        "responseMode": "responseNode"
+      },
+      "name": "Telegram DM webhook",
+      "type": "n8n-nodes-base.webhook",
+      "position": [240, 520]
+    },
+    {
+      "parameters": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "max_tokens": 300,
+          "system": "You are the Telegram DM agent for IELTS Master (ieltsmaster.org). Product: AI IELTS writing tool with 3-color annotation, 21-Day Challenge. Lifetime deal: $149 (only 150 units). Checkout: https://ieltsmaster-org.lemonsqueezy.com/checkout/buy/138f5144-e21e-4692-8631-feeee456bbbf. Reply in the same language the user wrote in (Mongolian, Russian, Uzbek, English). Under 150 words. Warm but direct. Output ONLY the reply text.",
+          "messages": [{ "role": "user", "content": "={{$node['Telegram DM webhook'].json.body.message.text}}" }]
+        }
+      },
+      "name": "Claude reply to Telegram DM",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [480, 520]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/bot{{$env.TELEGRAM_BOT_TOKEN}}/sendMessage",
+        "method": "POST",
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "chat_id": "={{$node['Telegram DM webhook'].json.body.message.chat.id}}",
+          "text": "={{$node['Claude reply to Telegram DM'].json.content[0].text}}"
+        }
+      },
+      "name": "Send Telegram reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [720, 520]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\": true}"
+      },
+      "name": "Webhook response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [960, 520]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "facebook-webhook",
+        "responseMode": "responseNode"
+      },
+      "name": "Facebook comment webhook",
+      "type": "n8n-nodes-base.webhook",
+      "position": [240, 660]
+    },
+    {
+      "parameters": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": {
+          "model": "claude-haiku-4-5-20251001",
+          "max_tokens": 200,
+          "system": "You are the Facebook comment agent for IELTS Master. Reply helpfully, warmly. Under 100 words. Match the language of the comment. Output ONLY the reply text.",
+          "messages": [{ "role": "user", "content": "={{$node['Facebook comment webhook'].json.body.entry[0].changes[0].value.message}}" }]
+        }
+      },
+      "name": "Claude reply to FB comment",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [480, 660]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v19.0/{{$node['Facebook comment webhook'].json.body.entry[0].changes[0].value.comment_id}}/comments",
+        "method": "POST",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "body": {
+          "message": "={{$node['Claude reply to FB comment'].json.content[0].text}}",
+          "access_token": "={{$env.META_PAGE_ACCESS_TOKEN}}"
+        }
+      },
+      "name": "Post FB comment reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [720, 660]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\": true}"
+      },
+      "name": "FB webhook response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [960, 660]
+    }
+  ],
+  "connections": {
+    "Daily 9am trigger": {
+      "main": [[
+        { "node": "Generate MN Telegram post", "type": "main", "index": 0 },
+        { "node": "Generate KZ Telegram post", "type": "main", "index": 0 },
+        { "node": "Generate Instagram caption", "type": "main", "index": 0 },
+        { "node": "Generate Facebook post", "type": "main", "index": 0 }
+      ]]
+    },
+    "Generate MN Telegram post": {
+      "main": [[{ "node": "Send to Telegram MN", "type": "main", "index": 0 }]]
+    },
+    "Generate KZ Telegram post": {
+      "main": [[{ "node": "Send to Telegram KZ", "type": "main", "index": 0 }]]
+    },
+    "Generate Facebook post": {
+      "main": [[{ "node": "Post to Facebook Page", "type": "main", "index": 0 }]]
+    },
+    "Telegram DM webhook": {
+      "main": [[{ "node": "Claude reply to Telegram DM", "type": "main", "index": 0 }]]
+    },
+    "Claude reply to Telegram DM": {
+      "main": [[
+        { "node": "Send Telegram reply", "type": "main", "index": 0 },
+        { "node": "Webhook response", "type": "main", "index": 0 }
+      ]]
+    },
+    "Facebook comment webhook": {
+      "main": [[{ "node": "Claude reply to FB comment", "type": "main", "index": 0 }]]
+    },
+    "Claude reply to FB comment": {
+      "main": [[
+        { "node": "Post FB comment reply", "type": "main", "index": 0 },
+        { "node": "FB webhook response", "type": "main", "index": 0 }
+      ]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "last",
+    "saveManualExecutions": false,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "tags": ["ielts-master", "social-agent", "24-7"]
+}
