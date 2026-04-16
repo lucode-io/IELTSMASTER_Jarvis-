@@ -1,9 +1,7 @@
 """
 IELTS Master — Claude Brain
-Single source of truth for all AI calls.
-Used by every platform handler.
+Central AI for all platform replies and post generation.
 """
-
 import os
 import logging
 import anthropic
@@ -16,8 +14,6 @@ def client():
     if _client is None:
         _client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     return _client
-
-# ── System prompt ─────────────────────────────────────────────────────────────
 
 SYSTEM = """You are the official AI agent for IELTS Master (ieltsmaster.org).
 You respond on behalf of Bat, solo Mongolian founder from Govi-Altai.
@@ -33,282 +29,150 @@ PRICING:
 - Free: 3 sessions/day (no card)
 - Starter: $19/month
 - Pro: $29/month
-- Lifetime: $149 once — only 150 units total, running out fast
+- Lifetime: $149 once — only 150 units total
 - 60-day money back on Lifetime
 - Checkout: https://ieltsmaster-org.lemonsqueezy.com/checkout/buy/138f5144-e21e-4692-8631-feeee456bbbf
 
-TONE RULES:
-- Never say "AI-powered" — say what it specifically does
-- Never say "I'd be happy to" or any corporate filler
-- Specific outcomes only: "Band 5.5 to 7.0 in 21 days" not "improve your score"
-- Warm, direct, founder energy
-- Never make up statistics
+TONE: Direct, warm, founder energy. No corporate filler. Specific outcomes only.
+OUTPUT: Reply text ONLY. No labels, no preamble."""
 
-OUTPUT: Reply text ONLY. No labels, no preamble, no quotation marks around it."""
+INTENTS = ["PRICING","HOW_TO_START","OBJECTION","COMPLIMENT","HATE","SUPPORT","QUESTION","SPAM"]
 
-# ── Intent classifier ─────────────────────────────────────────────────────────
+INTENT_RULES = {
+    "PRICING": "Explain: Free (3/day), Starter $19/mo, Pro $29/mo, Lifetime $149. Push Lifetime. Include checkout link.",
+    "HOW_TO_START": "Tell them: ieltsmaster.org, free, no card, 10 min first session. Mention 21-Day Challenge.",
+    "OBJECTION": "Acknowledge. Counter with specific outcome: 'Band 5.5 to 7.0 in 21 days.' Mention 60-day money back.",
+    "COMPLIMENT": "Thank warmly. Ask to share — friend gets 3 bonus sessions.",
+    "HATE": "Calm. Max 2 sentences. Leave door open.",
+    "SUPPORT": "Empathize. Tell them: support@ieltsmaster.org. Answer basic questions directly.",
+    "QUESTION": "Answer directly. Mention product only if relevant.",
+    "SPAM": "",
+}
 
-INTENT_LABELS = [
-    "PRICING",       # asking about cost
-    "HOW_TO_START",  # how to begin, sign up
-    "OBJECTION",     # doubts, "does it work", "too expensive"
-    "COMPLIMENT",    # positive feedback
-    "HATE",          # hostile, rude, negative attack
-    "SUPPORT",       # technical problem
-    "QUESTION",      # general question about IELTS or product
-    "SPAM",          # irrelevant, bot, spam
-]
+PLATFORM_RULES = {
+    "telegram": "Telegram DM/group. Casual, warm. No hashtags. Under 150 words. Reply in SAME language as user (Mongolian/Russian/Uzbek/English).",
+    "facebook": "Facebook Page. Warm community tone. No hashtags. Under 120 words. Match user language.",
+    "instagram": "Instagram DM/comment. Friendly. Under 100 words. 1-2 hashtags if comment reply. Match language.",
+    "twitter": "Twitter/X. MAX 2 sentences. Punchy. English.",
+    "reddit": "Reddit. DO NOT sound like an ad. Helpful first. Product only if 100% natural. Under 100 words.",
+    "youtube": "YouTube comment. Friendly. Under 80 words. English.",
+}
+
+POST_PLATFORM_RULES = {
+    "telegram_mn": "Mongolian (Cyrillic). Casual, warm. No hashtags. Max 200 words. End with question.",
+    "telegram_kz": "Russian (Kazakh students). Friendly. No hashtags. Max 200 words.",
+    "telegram_uz": "Uzbek. Warm. No hashtags. Max 200 words.",
+    "instagram": "English. Hook first line. 150-200 words. 6-8 hashtags at end: #IELTS #IELTSprep #IELTSwriting #bandscore #studyabroad #englishlearning + 2 niche. CTA: link in bio.",
+    "facebook": "English or native. Warm. 100-150 words. No hashtags. Soft CTA.",
+    "twitter": "English. Max 240 chars. Hook + CTA.",
+    "reddit": "English. Value-first. 200-300 words. Product mention only if natural at end.",
+}
+
+POST_TYPE_RULES = {
+    "tip": "ONE specific actionable IELTS Writing Task 2 tip with before/after example. No product pitch.",
+    "demo": "Describe AI 3-color annotation in action. Visual, exciting. Mention ieltsmaster.org naturally.",
+    "founder": "Solo Mongolian dev, Govi-Altai, broken wrist, building IELTS AI for Central Asia. Authentic.",
+    "flash_sale": "Lifetime deal $99 for 72hrs (normal $149). Urgency not desperation. Link: https://ieltsmaster-org.lemonsqueezy.com/checkout/buy/138f5144-e21e-4692-8631-feeee456bbbf",
+    "challenge": "Invite to free 21-Day IELTS Challenge at ieltsmaster.org. 10 min/day. No card. First result in 24hrs.",
+    "testimonial": "Realistic testimonial: Central Asian student, Band 5.5→7.0, 21 days, specific details.",
+    "exam_urgency": "Exam season. Running out of prep time. Urgency around starting NOW.",
+}
 
 def detect_intent(text: str) -> str:
     try:
         r = client().messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=15,
-            messages=[{
-                "role": "user",
-                "content": (
-                    f"Classify this message into exactly one category.\n"
-                    f"Categories: {', '.join(INTENT_LABELS)}\n"
-                    f"Reply with ONLY the category word.\n\n"
-                    f"Message: {text[:300]}"
-                )
-            }]
+            messages=[{"role":"user","content":f"Classify into exactly one: {', '.join(INTENTS)}\nReply ONE word only.\n\nMessage: {text[:300]}"}]
         )
         intent = r.content[0].text.strip().upper()
-        return intent if intent in INTENT_LABELS else "QUESTION"
+        return intent if intent in INTENTS else "QUESTION"
     except Exception as e:
-        log.error(f"Intent detection error: {e}")
+        log.error(f"Intent error: {e}")
         return "QUESTION"
 
-# ── Intent instructions ───────────────────────────────────────────────────────
-
-INTENT_INSTRUCTIONS = {
-    "PRICING": (
-        "User is asking about price. Explain clearly: Free (3 sessions/day), "
-        "Starter $19/mo, Pro $29/mo, Lifetime $149 once. "
-        "Recommend Lifetime as best value — only 150 units, running out. "
-        "Include checkout link naturally at end."
-    ),
-    "HOW_TO_START": (
-        "User wants to start. Tell them: go to ieltsmaster.org, free to start, "
-        "no credit card needed, first session takes 10 minutes. "
-        "Mention the 21-Day Challenge as the best way to begin."
-    ),
-    "OBJECTION": (
-        "User has a doubt (price, effectiveness, already tried something else). "
-        "Acknowledge genuinely first. Then counter with one specific outcome: "
-        "'Band 5.5 to 7.0 in 21 days.' Mention 60-day money back on Lifetime. "
-        "Use founder story if relevant. Don't be defensive."
-    ),
-    "COMPLIMENT": (
-        "Thank them warmly but briefly. Ask them to share with one friend "
-        "or post about it — friend gets 3 bonus sessions with their referral code."
-    ),
-    "HATE": (
-        "Stay completely calm. Maximum 2 sentences. Don't argue. "
-        "Leave the door open. Example: 'Fair enough. "
-        "It's free to try if you ever want to test it yourself.'"
-    ),
-    "SUPPORT": (
-        "Empathize briefly. Tell them to email support@ieltsmaster.org for fastest help. "
-        "If it's a basic question, answer it directly."
-    ),
-    "QUESTION": (
-        "Answer their question directly and helpfully. "
-        "Mention the product only if it genuinely helps answer the question."
-    ),
-    "SPAM": "",
-}
-
-# ── Platform rules ────────────────────────────────────────────────────────────
-
-PLATFORM_RULES = {
-    "telegram": (
-        "Platform: Telegram DM or group message. "
-        "Conversational, warm. No hashtags. Under 150 words. "
-        "Detect language of message and reply in SAME language "
-        "(Mongolian Cyrillic, Russian, Uzbek, or English)."
-    ),
-    "facebook": (
-        "Platform: Facebook Page comment or DM. "
-        "Warm community tone. No hashtags. Under 120 words. "
-        "Reply in same language as the user wrote in."
-    ),
-    "instagram": (
-        "Platform: Instagram DM or comment. "
-        "Friendly, concise. Under 100 words. "
-        "1-2 hashtags only if it's a comment reply. "
-        "Reply in same language as user."
-    ),
-    "twitter": (
-        "Platform: Twitter/X reply. "
-        "MAXIMUM 2 sentences. Punchy. No hashtags unless viral opportunity. "
-        "Always English."
-    ),
-    "reddit": (
-        "Platform: Reddit comment reply. "
-        "Do NOT sound like an ad — this will get banned. "
-        "Be genuinely helpful first. "
-        "Only mention the product if it 100% naturally fits. "
-        "Under 100 words. English."
-    ),
-    "youtube": (
-        "Platform: YouTube comment reply. "
-        "Friendly, encouraging. Under 80 words. No hashtags. English."
-    ),
-}
-
-# ── DM reply generator ────────────────────────────────────────────────────────
-
 def get_reply(platform: str, message: str) -> dict:
-    """
-    Generate Claude reply for any incoming DM/comment.
-    Returns {"reply": str, "intent": str, "skip": bool}
-    """
     intent = detect_intent(message)
-
     if intent == "SPAM":
         return {"reply": "", "intent": "SPAM", "skip": True}
-
-    platform_rule = PLATFORM_RULES.get(platform, PLATFORM_RULES["telegram"])
-    intent_rule   = INTENT_INSTRUCTIONS.get(intent, INTENT_INSTRUCTIONS["QUESTION"])
-
     prompt = (
-        f"{platform_rule}\n\n"
-        f"Instruction: {intent_rule}\n\n"
-        f"Incoming message: \"{message[:500]}\"\n\n"
-        f"Write the reply now."
+        f"{PLATFORM_RULES.get(platform, PLATFORM_RULES['telegram'])}\n\n"
+        f"Instruction: {INTENT_RULES.get(intent, INTENT_RULES['QUESTION'])}\n\n"
+        f"Message: \"{message[:500]}\"\n\nWrite the reply now."
     )
-
     try:
         r = client().messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=350,
             system=SYSTEM,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role":"user","content":prompt}]
         )
         reply = r.content[0].text.strip()
-        log.info(f"[{platform}] intent={intent} reply_len={len(reply)}")
+        log.info(f"[{platform}] intent={intent} len={len(reply)}")
         return {"reply": reply, "intent": intent, "skip": False}
     except Exception as e:
-        log.error(f"Reply generation failed: {e}")
-        return {
-            "reply": "Thanks for your message! Check ieltsmaster.org to get started free.",
-            "intent": "ERROR",
-            "skip": False
-        }
-
-# ── Post content generator ────────────────────────────────────────────────────
-
-POST_PLATFORM_RULES = {
-    "telegram_mn": (
-        "Write in Mongolian (Cyrillic script). Casual, warm. "
-        "No hashtags. Max 200 words. End with a question or soft invite to reply."
-    ),
-    "telegram_kz": (
-        "Write in Russian (for Kazakh IELTS students). "
-        "Friendly. No hashtags. Max 200 words."
-    ),
-    "telegram_uz": (
-        "Write in Uzbek. Warm, encouraging. "
-        "No hashtags. Max 200 words."
-    ),
-    "instagram": (
-        "English. Strong hook in first line (no emoji at start). "
-        "150-200 words. 6-8 hashtags at the very end: "
-        "#IELTS #IELTSprep #IELTSwriting #bandscore #studyabroad #englishlearning "
-        "plus 2 niche tags. End with CTA: 'Link in bio → ieltsmaster.org'"
-    ),
-    "facebook": (
-        "English or native language. Warm community tone. "
-        "100-150 words. No hashtags. "
-        "End with a soft CTA or open question."
-    ),
-    "twitter": (
-        "English. Maximum 240 characters total. "
-        "Punchy hook + one CTA. No filler."
-    ),
-    "reddit": (
-        "English. Value-first. 200-300 words. "
-        "Genuinely helpful content. "
-        "Mention product ONLY at the very end if it fits naturally, "
-        "and only as a soft mention."
-    ),
-    "youtube_desc": (
-        "Write a YouTube Short description + title. "
-        "Title: max 60 chars, curiosity hook. "
-        "Description: 100 words, 3 hashtags at end."
-    ),
-}
-
-POST_TYPE_INSTRUCTIONS = {
-    "tip": (
-        "Share ONE specific actionable IELTS Writing Task 2 tip. "
-        "Include a before/after example sentence. "
-        "Pure value — zero product mention."
-    ),
-    "demo": (
-        "Describe what AI 3-color essay annotation looks like in action "
-        "(green = good sentences, yellow = needs work, red = fix now). "
-        "Make it feel exciting and visual. "
-        "Mention ieltsmaster.org naturally once."
-    ),
-    "founder": (
-        "Tell the founder story: solo Mongolian developer, Govi-Altai, broken wrist, "
-        "building IELTS AI because Central Asian students are ignored by Western tools. "
-        "Authentic, not salesy. No fake humility."
-    ),
-    "flash_sale": (
-        "Announce a 72-hour lifetime deal at $99 (normally $149). "
-        "X of 150 units remaining. "
-        "Urgency without desperation. "
-        "End with checkout link: "
-        "https://ieltsmaster-org.lemonsqueezy.com/checkout/buy/138f5144-e21e-4692-8631-feeee456bbbf"
-    ),
-    "challenge": (
-        "Invite people to the free 21-Day IELTS Challenge at ieltsmaster.org. "
-        "Takes 10 minutes/day. No credit card. "
-        "First result visible after Day 1."
-    ),
-    "testimonial": (
-        "Write a realistic-sounding testimonial from a Central Asian student "
-        "who went from Band 5.5 to 7.0 in 21 days. "
-        "Make it specific: mention the city, the university they applied to, "
-        "the exact writing task type they struggled with."
-    ),
-    "exam_urgency": (
-        "June/September exam season is here. "
-        "Students with upcoming exams are running out of prep time. "
-        "Create urgency around starting preparation NOW. "
-        "Reference real exam dates if known."
-    ),
-}
+        log.error(f"Reply failed: {e}")
+        return {"reply": "Thanks! Visit ieltsmaster.org to get started free.", "intent": "ERROR", "skip": False}
 
 def generate_post(platform: str, post_type: str, extra: str = "") -> dict:
-    """
-    Generate a social media post for any platform.
-    Returns {"post": str, "platform": str, "type": str}
-    """
-    platform_rule = POST_PLATFORM_RULES.get(platform, POST_PLATFORM_RULES["instagram"])
-    type_rule     = POST_TYPE_INSTRUCTIONS.get(post_type, POST_TYPE_INSTRUCTIONS["tip"])
-
     prompt = (
-        f"Platform instructions: {platform_rule}\n\n"
-        f"Content type: {type_rule}\n"
-        f"{f'Additional context: {extra}' if extra else ''}\n\n"
-        f"Write the post now. Output ONLY the post text, nothing else."
+        f"Platform: {POST_PLATFORM_RULES.get(platform, POST_PLATFORM_RULES['instagram'])}\n\n"
+        f"Content: {POST_TYPE_RULES.get(post_type, POST_TYPE_RULES['tip'])}\n"
+        f"{'Extra context: ' + extra if extra else ''}\n\n"
+        f"Write the post now. Output ONLY the post text."
     )
-
     try:
         r = client().messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=500,
             system=SYSTEM,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role":"user","content":prompt}]
         )
         post = r.content[0].text.strip()
-        log.info(f"Post generated: {platform}/{post_type} ({len(post)} chars)")
+        log.info(f"Post: {platform}/{post_type} ({len(post)} chars)")
         return {"post": post, "platform": platform, "type": post_type}
     except Exception as e:
-        log.error(f"Post generation failed: {e}")
+        log.error(f"Post failed: {e}")
         return {"post": "", "error": str(e)}
+
+def jarvis_command(command: str, context: str = "") -> str:
+    """
+    Natural language command handler for Jarvis voice control.
+    Bat speaks to the bot in any language, Jarvis executes.
+    """
+    prompt = f"""You are Jarvis, Bat's personal AI assistant for IELTS Master.
+Bat is the founder — solo developer from Mongolia.
+When Bat gives you a command, execute it and respond clearly.
+
+Commands you can handle:
+- Write a post for [platform] about [topic] → return the post text
+- Reply to this DM: [message] → return the reply
+- Run flash sale → return flash sale post for all platforms
+- Post daily tip to Telegram → return the tip
+- What should I do today? → return today's priority action
+- How's revenue? / How's the bot? → status update
+- Write [content type] for [platform] → generate content
+
+Context about Bat's situation:
+- IELTS Master: ieltsmaster.org
+- Target: $80K by July 10
+- Platforms: Telegram (MN/KZ/UZ), Instagram, Facebook, Twitter, Reddit
+- Bot is live on Railway
+- Lifetime deal: $149
+
+{f'Additional context: {context}' if context else ''}
+
+Command from Bat: "{command}"
+
+Respond directly and helpfully. If it's a content generation request, output the content ready to use."""
+
+    try:
+        r = client().messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=800,
+            messages=[{"role":"user","content":prompt}]
+        )
+        return r.content[0].text.strip()
+    except Exception as e:
+        log.error(f"Jarvis command failed: {e}")
+        return f"Error processing command: {e}"
