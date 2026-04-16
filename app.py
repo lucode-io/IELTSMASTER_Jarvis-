@@ -60,10 +60,10 @@ def health():
 bot = telebot.TeleBot(TG_TOKEN, threaded=False) if TG_TOKEN else None
 
 def is_owner(message) -> bool:
-    """Check if message is from Bat (the owner)."""
-    if not TG_OWNER_ID:
+    owner_id = os.environ.get("TELEGRAM_OWNER_ID", "").strip()
+    if not owner_id:
         return False
-    return str(message.from_user.id) == str(TG_OWNER_ID)
+    return str(message.from_user.id) == owner_id
 
 if bot:
     # /start command
